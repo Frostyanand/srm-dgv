@@ -52,23 +52,38 @@ export default function StudentSubmissionsPage() {
     setExpandedDocId(expandedDocId === id ? null : id);
   };
 
-  const handleDownload = async (docId, fileName) => {
+  const handleDownload = async (docId, fileName, type = 'certificate') => {
     try {
       const token = await user.getIdToken();
-      const res = await fetch(`/api/documents/${docId}/download`, {
+      const res = await fetch(`/api/documents/${docId}/download?type=${type}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Download failed');
+      
+      const disposition = res.headers.get('Content-Disposition');
+      let downloadFilename = fileName || 'document.pdf';
+      if (disposition && disposition.indexOf('filename=') !== -1) {
+        const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
+        if (matches != null && matches[1]) {
+          downloadFilename = matches[1].replace(/['"]/g, '');
+        }
+      } else if (type === 'bundle') {
+        downloadFilename = `${(fileName || 'document').replace(/\.[^/.]+$/, "")}_Verified_Bundle.zip`;
+      } else if (type === 'certificate') {
+        downloadFilename = `${(fileName || 'document').replace(/\.[^/.]+$/, "")}_Approval_Certificate.pdf`;
+      }
+
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = fileName || 'document.pdf';
+      a.download = downloadFilename;
       document.body.appendChild(a);
       a.click();
       a.remove();
+      window.URL.revokeObjectURL(url);
     } catch (err) {
-      alert('Could not download document version. File may still be in processing.');
+      alert('Could not download document. File may still be processing.');
     }
   };
 
@@ -144,15 +159,27 @@ export default function StudentSubmissionsPage() {
                       {/* Right action buttons */}
                       <div className="flex items-center gap-2 self-start md:self-auto">
                         {isComplete && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDownload(doc.id, doc.originalName)}
-                            className="text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50 flex items-center gap-1.5"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                            Download
-                          </Button>
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDownload(doc.id, doc.originalName, 'certificate')}
+                              className="text-xs text-emerald-700 bg-emerald-50/60 border-emerald-300 hover:bg-emerald-100 flex items-center gap-1.5 font-medium"
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                              Certificate (PDF)
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDownload(doc.id, doc.originalName, 'bundle')}
+                              className="text-xs text-slate-600 border-slate-200 hover:bg-slate-50 flex items-center gap-1.5"
+                              title="Download ZIP archive with original document and certificate"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              Bundle (ZIP)
+                            </Button>
+                          </>
                         )}
                         <Button
                           variant="ghost"

@@ -28,12 +28,29 @@ export async function GET(request, { params }) {
     }
 
     const targetVersionId = versionId || document.currentVersionId;
+    const type = searchParams.get('type'); // 'certificate' | 'bundle' | 'original'
     
     // 2. Fetch the decrypted stream
     const { stream, mimeType, originalName } = await documentService.downloadDocumentVersion(documentId, targetVersionId);
 
-    // If the document is fully APPROVED, return a Sidecar ZIP bundle
-    if (document.status === 'APPROVED') {
+    const protocol = request.headers.get('x-forwarded-proto') || 'https';
+    const host = request.headers.get('host');
+    const verifyUrl = `${protocol}://${host}/verify?docId=${documentId}`;
+
+    // Case A: Certificate requested, OR default for approved document when not asking for original/bundle
+    if (type === 'certificate' || (!type && document.status === 'APPROVED')) {
+      const certBuffer = await certificateService.generateCertificate(documentId, verifyUrl);
+      const safeName = (originalName || document.title || 'Document').replace(/\.[^/.]+$/, "");
+      return new NextResponse(certBuffer, {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="${safeName}_Approval_Certificate.pdf"`,
+        },
+      });
+    }
+
+    // Case B: Full ZIP Bundle requested for approved document
+    if (type === 'bundle' && document.status === 'APPROVED') {
       const archive = new ZipArchive({ zlib: { level: 9 } });
       const passThrough = new PassThrough();
       
@@ -43,29 +60,25 @@ export async function GET(request, { params }) {
       archive.append(stream, { name: originalName || 'document.bin' });
 
       // Add the Certificate of Completion
-      const protocol = request.headers.get('x-forwarded-proto') || 'http';
-      const host = request.headers.get('host');
-      const verifyUrl = `${protocol}://${host}/verify`;
-      
       const certBuffer = await certificateService.generateCertificate(documentId, verifyUrl);
       archive.append(certBuffer, { name: 'Certificate_of_Completion.pdf' });
 
       archive.finalize();
 
       const webStream = Readable.toWeb(passThrough);
+      const safeName = (originalName || document.title || 'document').replace(/\.[^/.]+$/, "");
 
       return new NextResponse(webStream, {
         headers: {
           'Content-Type': 'application/zip',
-          'Content-Disposition': `attachment; filename="${(originalName || 'document').replace(/\.[^/.]+$/, "")}_Verified_Bundle.zip"`,
+          'Content-Disposition': `attachment; filename="${safeName}_Verified_Bundle.zip"`,
         },
       });
     }
 
-    // Convert Node Readable stream to Web ReadableStream
+    // Case C: Original file (explicitly requested or document is pending/rejected)
     const webStream = Readable.toWeb(stream);
 
-    // 3. Stream it directly to the client
     return new NextResponse(webStream, {
       headers: {
         'Content-Type': mimeType || 'application/octet-stream',
@@ -73,6 +86,7 @@ export async function GET(request, { params }) {
       },
     });
   } catch (error) {
+    console.error('Download error:', error);
     return NextResponse.json({ error: error.message }, { status: error.statusCode || 500 });
   }
 }

@@ -21,7 +21,7 @@ export default function ReviewSignModal({ document, onClose, onSuccess }) {
       try {
         setLoadingFile(true);
         const token = await user.getIdToken();
-        const res = await fetch(`/api/documents/${document.id}/download`, {
+        const res = await fetch(`/api/documents/${document.id}/download?type=original`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
