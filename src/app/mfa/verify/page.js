@@ -49,6 +49,7 @@ export default function MFAVerifyPage() {
         const { role } = await user.getIdTokenResult().then(res => res.claims);
         if (role === 'SUPER_ADMIN') router.push('/admin');
         else if (role === 'SIGNATORY') router.push('/signatory');
+        else if (role === 'STUDENT') router.push('/student');
         else router.push('/department');
       } else {
         const data = await res.json();

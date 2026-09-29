@@ -28,6 +28,7 @@ export default function Sidebar() {
       { name: 'Dashboard', path: '/admin', icon: LayoutDashboard },
       { name: 'Users & Signatories', path: '/admin/users', icon: Users },
       { name: 'Workflows', path: '/admin/workflows', icon: FileText },
+      { name: 'College Structure', path: '/student/departments', icon: Building2 },
       { name: 'Audit Logs', path: '/admin/audit', icon: ShieldCheck },
       { name: 'Security Events', path: '/admin/security-events', icon: ShieldAlert },
     ],
@@ -35,11 +36,21 @@ export default function Sidebar() {
       { name: 'Dashboard', path: '/department', icon: LayoutDashboard },
       { name: 'Upload Document', path: '/department/upload', icon: Upload },
       { name: 'Submissions', path: '/department/submissions', icon: FileText },
+      { name: 'College Structure', path: '/student/departments', icon: Building2 },
     ],
     SIGNATORY: [
       { name: 'Dashboard', path: '/signatory', icon: LayoutDashboard },
       { name: 'Pending Approvals', path: '/signatory/pending', icon: Clock },
-      { name: 'History', path: '/signatory/history', icon: CheckCircle },
+      { name: 'Signature History', path: '/signatory/history', icon: CheckCircle },
+      { name: 'Submit Document', path: '/department/upload', icon: Upload },
+      { name: 'My Submissions', path: '/department/submissions', icon: FileText },
+      { name: 'College Structure', path: '/student/departments', icon: Building2 },
+    ],
+    STUDENT: [
+      { name: 'Student Dashboard', path: '/student', icon: LayoutDashboard },
+      { name: 'Apply / Submit Doc', path: '/student/apply', icon: Upload },
+      { name: 'Track My Requests', path: '/student/submissions', icon: Clock },
+      { name: 'College Hierarchy', path: '/student/departments', icon: Building2 },
     ]
   };
 

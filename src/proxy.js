@@ -68,7 +68,7 @@ export async function proxy(request) {
   }
 
   // 3. Strict Edge Route Protection (RBAC)
-  const protectedRoutes = ['/admin', '/department', '/signatory'];
+  const protectedRoutes = ['/admin', '/department', '/signatory', '/student'];
   const isProtectedRoute = protectedRoutes.some(route => path.startsWith(route));
   
   if (isProtectedRoute) {
@@ -95,10 +95,14 @@ export async function proxy(request) {
       if (path.startsWith('/admin') && role !== 'SUPER_ADMIN') {
         return NextResponse.redirect(new URL('/login', request.url));
       }
-      if (path.startsWith('/department') && role !== 'DEPARTMENT_USER') {
+      // Department upload and submission can be accessed by DEPARTMENT_USER, SIGNATORY (dual capability), and SUPER_ADMIN
+      if (path.startsWith('/department') && !['DEPARTMENT_USER', 'SIGNATORY', 'SUPER_ADMIN'].includes(role)) {
         return NextResponse.redirect(new URL('/login', request.url));
       }
-      if (path.startsWith('/signatory') && role !== 'SIGNATORY') {
+      if (path.startsWith('/signatory') && !['SIGNATORY', 'SUPER_ADMIN'].includes(role)) {
+        return NextResponse.redirect(new URL('/login', request.url));
+      }
+      if (path.startsWith('/student') && !['STUDENT', 'SUPER_ADMIN'].includes(role)) {
         return NextResponse.redirect(new URL('/login', request.url));
       }
     } catch (e) {
@@ -111,5 +115,5 @@ export async function proxy(request) {
 }
 
 export const config = {
-  matcher: ['/api/:path*', '/admin/:path*', '/department/:path*', '/signatory/:path*'],
+  matcher: ['/api/:path*', '/admin/:path*', '/department/:path*', '/signatory/:path*', '/student/:path*'],
 };

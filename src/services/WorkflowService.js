@@ -12,18 +12,19 @@ class WorkflowService {
    * Initializes a workflow with dynamically selected approvers
    * @param {string} documentId 
    * @param {Array<string>} requiredApprovers 
+   * @param {string} templateId
    */
-  async initializeWorkflow(documentId, requiredApprovers) {
+  async initializeWorkflow(documentId, requiredApprovers, templateId = 'CUSTOM') {
     if (!requiredApprovers || requiredApprovers.length === 0) {
       throw new IntegrityError('At least one approver must be selected.');
     }
 
     const workflowData = {
       documentId,
-      templateId: 'CUSTOM', // Replaced static template with custom
+      templateId,
       status: 'PENDING',
       requiredApprovers,
-      approvedBy: [], // Array of roleOrUserId that have approved
+      approvedBy: [], // Array of roleOrUserId that have approved in order
     };
 
     await workflowRepository.create(workflowData);
@@ -49,13 +50,21 @@ class WorkflowService {
     const version = await documentRepository.getVersion(documentId, document.currentVersionId);
     const signatory = await userRepository.findById(signatoryId);
 
-    // Verify current signatory is in the required approvers list
-    const isRequired = workflow.requiredApprovers.includes(signatory.id) || workflow.requiredApprovers.includes(signatory.role);
-    if (!isRequired) {
-      throw new UnauthorizedError('Signatory is not required for this workflow.');
+    // Sequential Gatekeeper Enforcement:
+    // Only the current active approver in the sequential pipeline may act
+    const currentStepIndex = (workflow.approvedBy || []).length;
+    if (currentStepIndex >= workflow.requiredApprovers.length) {
+      throw new IntegrityError('All required approvals have already been processed.');
     }
 
-    const identifierUsed = workflow.requiredApprovers.includes(signatory.id) ? signatory.id : signatory.role;
+    const currentExpectedApprover = workflow.requiredApprovers[currentStepIndex];
+    const isCurrentTurn = (currentExpectedApprover === signatory.id || currentExpectedApprover === signatory.role);
+
+    if (!isCurrentTurn) {
+      throw new UnauthorizedError('It is not your turn to sign this document. Awaiting prior stage approval.');
+    }
+
+    const identifierUsed = (currentExpectedApprover === signatory.id) ? signatory.id : signatory.role;
 
     if (workflow.approvedBy.includes(identifierUsed)) {
       throw new IntegrityError('Signatory has already approved this document.');
@@ -94,15 +103,19 @@ class WorkflowService {
     await auditService.logEvent(signatoryId, signatory.role, action, { documentId, versionId: version.id }, requestInfo);
 
     if (action === 'REJECT') {
-      // Any rejection fails the entire workflow
-      await workflowRepository.update(workflow.id, { status: 'REJECTED' });
+      // Rejection immediately stops workflow and rejects document
+      await workflowRepository.update(workflow.id, { 
+        status: 'REJECTED',
+        rejectedBy: identifierUsed,
+        rejectedRemarks: remarks
+      });
       await documentRepository.update(documentId, { status: 'REJECTED' });
       return;
     }
 
     // Action === 'APPROVE'
     const newApprovedBy = [...workflow.approvedBy, identifierUsed];
-    const isFullyApproved = workflow.requiredApprovers.every(req => newApprovedBy.includes(req));
+    const isFullyApproved = (newApprovedBy.length === workflow.requiredApprovers.length);
 
     if (isFullyApproved) {
       // Workflow Complete
@@ -116,7 +129,7 @@ class WorkflowService {
         secureLedger: ledgerEntry
       });
     } else {
-      // Mark this individual's approval
+      // Advance to next sequential approver
       await workflowRepository.update(workflow.id, {
         approvedBy: newApprovedBy
       });
@@ -124,33 +137,37 @@ class WorkflowService {
   }
 
   /**
-   * Retrieves pending workflows for a signatory
+   * Retrieves pending workflows for a signatory (Sequential Gatekeeper aware)
    * @param {string} signatoryId 
    * @param {string} role 
    */
   async getPendingWorkflowsForSignatory(signatoryId, role) {
-    // A more advanced query would be done in repository. For now we fetch all pending and filter.
     const allWorkflows = await workflowRepository.findAll();
     const pending = allWorkflows.filter(wf => wf.status === 'PENDING');
     
     const results = [];
     for (const wf of pending) {
-      const isRequired = wf.requiredApprovers.includes(signatoryId) || wf.requiredApprovers.includes(role);
-      const identifierUsed = wf.requiredApprovers.includes(signatoryId) ? signatoryId : role;
-      const hasApproved = wf.approvedBy.includes(identifierUsed);
+      const approvedCount = (wf.approvedBy || []).length;
+      if (approvedCount >= wf.requiredApprovers.length) continue;
 
-      if (isRequired && !hasApproved) {
+      // Sequential Gatekeeper: check if it is THIS signatory's turn
+      const currentRequired = wf.requiredApprovers[approvedCount];
+      const isMyTurn = (currentRequired === signatoryId || currentRequired === role);
+
+      if (isMyTurn) {
         try {
-          // Fetch document metadata for context
           const doc = await documentRepository.findById(wf.documentId);
           results.push({
-            id: wf.documentId, // Changed to documentId so that ReviewSignModal fetches correctly!
+            id: wf.documentId,
             workflowId: wf.id,
             title: doc.title,
             departmentId: doc.departmentId,
             date: new Date(wf.createdAt).toISOString().split('T')[0],
             requiredApprovers: wf.requiredApprovers,
-            approvedBy: wf.approvedBy
+            approvedBy: wf.approvedBy,
+            currentStep: approvedCount + 1,
+            totalSteps: wf.requiredApprovers.length,
+            submitterId: doc.submitterId
           });
         } catch (err) {
           console.warn(`Could not find document ${wf.documentId} for workflow ${wf.id}, skipping.`);

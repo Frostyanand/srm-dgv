@@ -15,7 +15,8 @@ export async function GET(request) {
     const token = authHeader.split('Bearer ')[1];
     const user = await authService.verifySession(token);
 
-    if (user.role !== 'DEPARTMENT_USER' && user.role !== 'SUPER_ADMIN') {
+    const allowedRoles = ['DEPARTMENT_USER', 'SUPER_ADMIN', 'SIGNATORY', 'STUDENT'];
+    if (!allowedRoles.includes(user.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

@@ -11,7 +11,8 @@ export async function GET(request) {
     const token = authHeader.split('Bearer ')[1];
     const user = await authService.verifySession(token);
 
-    if (user.role !== 'SUPER_ADMIN' && user.role !== 'DEPARTMENT_USER') {
+    const allowedRoles = ['SUPER_ADMIN', 'DEPARTMENT_USER', 'SIGNATORY', 'STUDENT'];
+    if (!allowedRoles.includes(user.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -24,13 +25,19 @@ export async function GET(request) {
       email: u.email,
       role: u.role,
       departmentId: u.departmentId,
+      designation: u.designation || (u.role === 'SIGNATORY' ? 'Signatory Authority' : u.role),
+      department: u.department || u.departmentId || null,
+      section: u.section || null,
+      year: u.year || null,
+      school: u.school || 'School of Computing',
+      facultyAdvisorId: u.facultyAdvisorId || null,
       status: u.status || 'ACTIVE' 
     }));
 
-    // If Department User, they only need to see active signatories
-    if (user.role === 'DEPARTMENT_USER') {
+    // If Department User, Student, or Signatory, they need active signatories and faculty
+    if (user.role !== 'SUPER_ADMIN') {
       safeUsers = safeUsers.filter(u => 
-        u.status !== 'INACTIVE' && u.role === 'SIGNATORY'
+        u.status !== 'INACTIVE' && (u.role === 'SIGNATORY' || u.role === 'SUPER_ADMIN')
       );
     }
 

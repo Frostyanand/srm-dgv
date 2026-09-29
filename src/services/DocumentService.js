@@ -14,7 +14,7 @@ class DocumentService {
    * @param {Array<string>} requiredApprovers
    * @returns {Promise<string>} documentId
    */
-  async uploadDocument(docData, webFileStream, requiredApprovers) {
+  async uploadDocument(docData, webFileStream, requiredApprovers, templateId = 'CUSTOM') {
     const { departmentId, submitterId, title, description, mimeType, originalName } = docData;
 
     // Convert Web Stream to Node Stream for crypto operations
@@ -78,7 +78,7 @@ class DocumentService {
     await documentRepository.update(documentId, { currentVersionId: versionId });
 
     // 6. Initialize Workflow Engine
-    await workflowService.initializeWorkflow(documentId, requiredApprovers);
+    await workflowService.initializeWorkflow(documentId, requiredApprovers, templateId);
 
     return documentId;
   }
