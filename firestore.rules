@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default Deny All
+    // The SRM Digital Verification System uses a strictly backend-driven architecture.
+    // All Firestore access is routed through the Next.js API Routes using the Firebase Admin SDK.
+    // The client should NEVER have direct access to read or write Firestore.
+    // This protects Approval Records, Audit Logs, and Security Events from direct manipulation.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
