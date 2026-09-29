@@ -87,6 +87,8 @@ export async function GET(request) {
     return NextResponse.json({
       success: true,
       structure: universityLeadership,
+      departments: universityLeadership.schools[0].departments,
+      directorate: universityLeadership.schools[0],
       signatories
     });
   } catch (error) {

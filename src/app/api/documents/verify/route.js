@@ -2,6 +2,73 @@ import { NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase/admin';
 import { securityService } from '@/services/SecurityService';
 
+export async function GET(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const docId = searchParams.get('docId') || searchParams.get('id');
+
+    if (!docId) {
+      return NextResponse.json({ error: 'Missing docId query parameter' }, { status: 400 });
+    }
+
+    const docSnap = await adminDb.collection('documents').doc(docId).get();
+    if (!docSnap.exists) {
+      return NextResponse.json({ 
+        verified: false, 
+        message: 'DOCUMENT NOT FOUND. No record matching this identifier exists on the ledger.' 
+      }, { status: 404 });
+    }
+
+    const docData = docSnap.data();
+
+    // Fetch workflow approvals
+    const approvalsSnap = await adminDb.collection('approvals')
+      .where('documentId', '==', docId)
+      .get();
+      
+    let signers = [];
+    for (const approvalDoc of approvalsSnap.docs) {
+      const approval = approvalDoc.data();
+      const userSnap = await adminDb.collection('users').doc(approval.approverId).get();
+      const user = userSnap.exists ? userSnap.data() : {};
+      signers.push({
+        name: user.name || 'Official Signatory',
+        email: user.email || '',
+        role: user.role || 'SIGNATORY',
+        designation: user.designation || '',
+        action: approval.action,
+        timestamp: approval.timestamp,
+        signature: approval.signature || '',
+      });
+    }
+    signers.sort((a, b) => a.timestamp - b.timestamp);
+
+    let departmentName = 'School of Computing';
+    if (docData.departmentId) {
+      const deptSnap = await adminDb.collection('departments').doc(docData.departmentId).get();
+      if (deptSnap.exists) departmentName = deptSnap.data().name;
+    }
+
+    return NextResponse.json({
+      verified: docData.status === 'APPROVED',
+      status: docData.status,
+      document: {
+        id: docId,
+        title: docData.title,
+        description: docData.description,
+        department: departmentName,
+        status: docData.status,
+        createdAt: docData.createdAt,
+      },
+      signers,
+    });
+  } catch (error) {
+    console.error('Verify GET error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+
 export async function POST(request) {
   try {
     const { fileHash } = await request.json();

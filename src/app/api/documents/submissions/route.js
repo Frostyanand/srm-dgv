@@ -102,7 +102,7 @@ export async function GET(request) {
     // Sort by newest first
     enrichedDocuments.sort((a, b) => b.createdAt - a.createdAt);
 
-    return NextResponse.json({ submissions: enrichedDocuments });
+    return NextResponse.json({ submissions: enrichedDocuments, documents: enrichedDocuments });
   } catch (error) {
     console.error('Failed to fetch submissions:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

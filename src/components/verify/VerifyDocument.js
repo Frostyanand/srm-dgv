@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { UploadCloud, CheckCircle2, XCircle, ShieldCheck, FileSearch, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
@@ -10,6 +10,37 @@ export default function VerifyDocument({ isPublic = false }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [fileName, setFileName] = useState('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const docId = params.get('docId') || params.get('id');
+      if (docId) {
+        verifyById(docId);
+      }
+    }
+  }, []);
+
+  const verifyById = async (id) => {
+    try {
+      setVerifying(true);
+      setError(null);
+      setResult(null);
+
+      const response = await fetch(`/api/documents/verify?docId=${id}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Verification failed');
+      }
+
+      setResult(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   const calculateHash = async (file) => {
     const arrayBuffer = await file.arrayBuffer();
